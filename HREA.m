@@ -51,6 +51,9 @@ function [DifPop, TraPop, out] = HREA(problem, opts, name)
     [archive, crowdDisArchive] = archiveUpdate(population, opts.N, opts.eps, 0);
 
     out = initializeRunOutput(name, FE, population, archive, refs);
+    if opts.enablePlot
+        PlotPopulations(populationToResult(population), populationToResult(archive), FE, opts.maxFE, name, opts.nvar);
+    end
     generation = 0;
 
     while FE < opts.maxFE
@@ -74,6 +77,9 @@ function [DifPop, TraPop, out] = HREA(problem, opts, name)
         progress = FE / opts.maxFE;
         [archive, crowdDisArchive] = archiveUpdate([archive, offspring], opts.N, opts.eps, progress);
         out = appendRunOutput(out, FE, generation, population, archive, refs);
+        if opts.enablePlot && mod(generation, opts.plotInterval) == 0
+            PlotPopulations(populationToResult(population), populationToResult(archive), FE, opts.maxFE, name, opts.nvar);
+        end
 
         if opts.verbose
             label = name;

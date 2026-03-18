@@ -15,12 +15,18 @@ function refs = prepareReferenceData(problem, name)
 
     if (isempty(refs.truePF) || isempty(refs.truePS)) && ~isempty(name) && exist('get_local_fun', 'file') == 2
         try
-            [PS_global, PS_local, PF_global, PF_local] = get_local_fun(name);
-            refs.truePS = [PS_global; PS_local];
+            [PS_global1, PS_global2, PS_local, PF_global, PF_local] = get_local_fun(name);
+            refs.truePS = [PS_global1; PS_global2; PS_local];
             refs.truePF = [PF_global; PF_local];
         catch
-            refs.truePF = [];
-            refs.truePS = [];
+            try
+                [PS_global, PS_local, PF_global, PF_local] = get_local_fun(name);
+                refs.truePS = [PS_global; PS_local];
+                refs.truePF = [PF_global; PF_local];
+            catch
+                refs.truePF = [];
+                refs.truePS = [];
+            end
         end
     end
 

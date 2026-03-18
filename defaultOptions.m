@@ -23,10 +23,14 @@ function opts = defaultOptions(problem, opts)
     opts = setDefaultOption(opts, 'disM', 20);
     opts = setDefaultOption(opts, 'seed', []);
     opts = setDefaultOption(opts, 'verbose', true);
+    opts = setDefaultOption(opts, 'enablePlot', false);
+    opts = setDefaultOption(opts, 'plotInterval', 1);
+    opts = setDefaultOption(opts, 'nvar', numel(problem.lower));
     opts.D = numel(problem.lower);
 
     validateattributes(opts.N, {'numeric'}, {'scalar', 'integer', '>=', 2}, mfilename, 'opts.N');
     validateattributes(opts.maxFE, {'numeric'}, {'scalar', 'integer', '>=', opts.N}, mfilename, 'opts.maxFE');
     validateattributes(opts.eps, {'numeric'}, {'scalar', '>=', 0, '<=', 1}, mfilename, 'opts.eps');
     validateattributes(opts.p, {'numeric'}, {'scalar', '>=', 0, '<=', 1}, mfilename, 'opts.p');
+    validateattributes(opts.plotInterval, {'numeric'}, {'scalar', 'integer', '>=', 1}, mfilename, 'opts.plotInterval');
 end
