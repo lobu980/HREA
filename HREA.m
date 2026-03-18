@@ -1,102 +1,95 @@
-function [archive, history] = HREA(problem, options)
+function [DifPop, TraPop, out] = HREA(problem, opts, name)
 %HREA Standalone hierarchy-ranking evolutionary algorithm.
-%   [archive, history] = HREA(problem, options) runs a standalone MATLAB
-%   implementation of the hierarchy ranking based evolutionary algorithm
-%   (HREA) for multimodal multi-objective optimization.
+%   [DifPop, TraPop, out] = HREA(problem, opts, name) runs a standalone
+%   MATLAB implementation of the hierarchy ranking based evolutionary
+%   algorithm (HREA) for multimodal multi-objective optimization.
 %
-%   This version removes PlatEMO dependencies and uses plain MATLAB
-%   function files. The caller only needs to define the optimization
-%   problem through function handles and variable bounds.
+%   This version removes PlatEMO dependencies and can be called directly by
+%   experiment scripts. The output format is aligned with the common
+%   benchmark-driver style where TraPop/F and TraPop/X are used for metric
+%   calculation after the optimization ends.
 %
-%   Required fields in problem:
-%       problem.objFcn    : function handle, objs = objFcn(dec)
-%       problem.lower     : 1-by-D lower bound vector
-%       problem.upper     : 1-by-D upper bound vector
+%   Supported problem fields (aliases are accepted by normalizeProblem):
+%       objFcn / evaluate / CalObj : function handle, objs = f(dec)
+%       lower / lb / xl            : 1-by-D lower bounds
+%       upper / ub / xu            : 1-by-D upper bounds
+%       integer                    : integer variable indices (optional)
 %
-%   Optional fields in problem:
-%       problem.integer   : indices of integer decision variables
-%
-%   Optional fields in options:
-%       options.N         : population size (default 100)
-%       options.maxFE     : maximum function evaluations (default 10000)
-%       options.eps       : local Pareto front quality parameter (default 0.3)
-%       options.p         : archive mating probability after half budget (0.5)
-%       options.proC      : crossover probability (default 1)
-%       options.disC      : SBX distribution index (default 20)
-%       options.proM      : mutation probability per individual (default 1)
-%       options.disM      : polynomial mutation index (default 20)
-%       options.seed      : RNG seed, empty means keep current state
-%       options.verbose   : print progress flag (default true)
+%   Supported options:
+%       N, maxFE/FEmax, eps, p, proC, disC, proM, disM, seed, verbose
 %
 %   Outputs:
-%       archive           : final archive struct array with fields decs, objs
-%       history           : struct storing run statistics
-%
-%   Example:
-%       problem.objFcn = @(x) [x(1), (1 + x(2)) / x(1)];
-%       problem.lower  = [0.1, 0];
-%       problem.upper  = [1.0, 1];
-%       options.N      = 80;
-%       options.maxFE  = 4000;
-%       archive = HREA(problem, options);
+%       DifPop : final decision-space population struct with fields X and F
+%       TraPop : final archive struct with fields X and F
+%       out    : run record containing FE/gen histories and raw populations
 %
 %   Reference:
 %       W. Li, X. Yao, T. Zhang, R. Wang, and L. Wang, "Hierarchy ranking
 %       method for multimodal multi-objective optimization with local
 %       Pareto fronts," IEEE Transactions on Evolutionary Computation, 2022.
 
-    if nargin < 2
-        options = struct();
+    if nargin < 2 || isempty(opts)
+        opts = struct();
+    end
+    if nargin < 3
+        name = '';
     end
 
+    problem = normalizeProblem(problem);
     problem = validateProblem(problem);
-    options = defaultOptions(problem, options);
+    opts = defaultOptions(problem, opts);
+    refs = prepareReferenceData(problem, name);
 
-    if ~isempty(options.seed)
-        rng(options.seed);
+    if ~isempty(opts.seed)
+        rng(opts.seed);
     end
 
-    population = initializePopulation(problem, options.N);
+    population = initializePopulation(problem, opts.N);
     FE = numel(population);
 
-    [population, crowdDisPopulation] = environmentalSelection(population, options.N);
-    [archive, crowdDisArchive] = archiveUpdate(population, options.N, options.eps, 0);
+    [population, crowdDisPopulation] = environmentalSelection(population, opts.N);
+    [archive, crowdDisArchive] = archiveUpdate(population, opts.N, opts.eps, 0);
 
-    history.FE = FE;
-    history.archiveSize = numel(archive);
-    history.populationSize = numel(population);
-    history.snapshots = {archive};
-
+    out = initializeRunOutput(name, FE, population, archive, refs);
     generation = 0;
-    while FE < options.maxFE
+
+    while FE < opts.maxFE
         generation = generation + 1;
-        remaining = options.maxFE - FE;
-        offspringCount = min(options.N, remaining);
+        remaining = opts.maxFE - FE;
+        offspringCount = min(opts.N, remaining);
         if offspringCount <= 0
             break;
         end
 
-        if FE >= options.maxFE * 0.5 && rand < options.p
+        if FE >= opts.maxFE * 0.5 && rand < opts.p
             matingPool = tournamentSelection(2, offspringCount, -crowdDisArchive);
-            offspring = operatorGA(problem, archive(matingPool), options, offspringCount);
+            offspring = operatorGA(problem, archive(matingPool), opts, offspringCount);
         else
             matingPool = tournamentSelection(2, offspringCount, -crowdDisPopulation);
-            offspring = operatorGA(problem, population(matingPool), options, offspringCount);
+            offspring = operatorGA(problem, population(matingPool), opts, offspringCount);
         end
         FE = FE + numel(offspring);
 
-        [population, crowdDisPopulation] = environmentalSelection([population, offspring], options.N);
-        progress = FE / options.maxFE;
-        [archive, crowdDisArchive] = archiveUpdate([archive, offspring], options.N, options.eps, progress);
+        [population, crowdDisPopulation] = environmentalSelection([population, offspring], opts.N);
+        progress = FE / opts.maxFE;
+        [archive, crowdDisArchive] = archiveUpdate([archive, offspring], opts.N, opts.eps, progress);
+        out = appendRunOutput(out, FE, generation, population, archive, refs);
 
-        history.FE(end + 1, 1) = FE; %#ok<AGROW>
-        history.archiveSize(end + 1, 1) = numel(archive); %#ok<AGROW>
-        history.populationSize(end + 1, 1) = numel(population); %#ok<AGROW>
-        history.snapshots{end + 1, 1} = archive; %#ok<AGROW>
-
-        if options.verbose
-            fprintf('Generation %4d | FE %6d / %6d | Pop %4d | Archive %4d\n', ...
-                generation, FE, options.maxFE, numel(population), numel(archive));
+        if opts.verbose
+            label = name;
+            if isempty(label)
+                label = 'HREA';
+            end
+            fprintf('[%s] Generation %4d | FE %6d / %6d | Pop %4d | Archive %4d\n', ...
+                label, generation, FE, opts.maxFE, numel(population), numel(archive));
         end
     end
+
+    DifPop = populationToResult(population);
+    TraPop = populationToResult(archive);
+    out.finalPopulation = population;
+    out.finalArchive = archive;
+    out.options = opts;
+    out.problem = problem;
+    out.name = name;
 end

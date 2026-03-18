@@ -14,15 +14,15 @@ function demo_hrea()
     options.seed = 1;
     options.verbose = true;
 
-    [archive, history] = HREA(problem, options);
-    archiveObjs = reshape([archive.objs], 2, [])';
+    [~, TraPop, out] = HREA(problem, options, 'demo');
+    archiveObjs = TraPop.F;
 
     figure('Color', 'w');
     scatter(archiveObjs(:, 1), archiveObjs(:, 2), 36, 'filled');
     grid on;
     xlabel('f_1(x)');
     ylabel('f_2(x)');
-    title(sprintf('HREA archive, final size = %d, FE = %d', numel(archive), history.FE(end)));
+    title(sprintf('HREA archive, final size = %d, FE = %d', size(TraPop.F, 1), out.FE_hist(end)));
 end
 
 function f = demoObjective(x)
