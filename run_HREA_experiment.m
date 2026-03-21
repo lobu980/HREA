@@ -76,6 +76,19 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
 
         metric = ComputeMetrics(TraPop, pfture, psture);
 
+        if isfield(opts, 'enablePlot') && opts.enablePlot && exist('PlotPopulations', 'file') == 2
+            try
+                currentFE = opts.FEmax;
+                if ~isempty(FE_hist_all{runs})
+                    currentFE = FE_hist_all{runs}(end);
+                end
+                PlotPopulations(TraPop, DifPop, currentFE, opts.FEmax, name, size(TraPop.X, 2));
+                drawnow;
+            catch ME
+                warning('run_HREA_experiment:PlotFailed', 'PlotPopulations failed for %s: %s', name, ME.message);
+            end
+        end
+
         IGDX_all(runs) = metric.IGDx;
         IGD_all(runs) = metric.IGD;
         HV_all(runs) = metric.HV;
@@ -249,6 +262,7 @@ function opts = BuildDefaultOptions(problem)
     opts.delLambda = 0.65;
     opts.fdknObjW = 0.4;
     opts.fdknDecW = 0.6;
+    opts.enablePlot = true;
 end
 
 function value = GetProblemScalar(problem, names, defaultValue)

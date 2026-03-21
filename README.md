@@ -24,6 +24,8 @@
 - `loadReferenceData.m`：按 suite 和常见目录规则加载参考 PF/PS 数据。
 - `mergeReferenceBlocks.m`：合并参考数据块。
 - `demo_MMOEADC_HREA_mode.m`：HREA 风格运行示例。
+- `get_local_fun.m`：生成 PS / PF 参考曲线或曲面。
+- `PlotPopulations.m`：按参考 PS / PF 绘制决策空间和目标空间图像。
 
 ## 推荐入口
 
@@ -58,6 +60,10 @@ demo_MMOEADC_HREA_mode('CEC2020','CEC2020_F01',1);
 - 指标计算目录，例如 `Indicator_calculation/`
 - 可选绘图目录，例如 `fun_plot/`
 - 可选参考 PF / PS 数据文件
+
+## 绘图支持
+
+运行 `run_HREA_experiment` 时，若 `opts.enablePlot = true` 且基准名称被 `get_local_fun.m` 支持，则会自动调用 `PlotPopulations.m` 绘制当前种群与参考 PS / PF 的对比图。
 
 ## 输出结果
 
