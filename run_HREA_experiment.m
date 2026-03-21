@@ -1,9 +1,16 @@
-function results = run_HREA_experiment(name, num_of_runs)
-%RUN_HREA_EXPERIMENT Benchmark driver that wraps MMOEA-DC/HREA workflow.
-%   RESULTS = RUN_HREA_EXPERIMENT(NAME, NUM_OF_RUNS) integrates the
-%   user-provided experiment procedure, including benchmark path setup,
-%   repeated execution, indicator calculation, result saving, and optional
-%   plotting, while dispatching the optimization core to MMEA_BDC/MMOEADC.
+function results = run_HREA_experiment(name, num_of_runs, suite)
+%RUN_HREA_EXPERIMENT HREA-style benchmark driver for MMOEA-DC.
+%   RESULTS = RUN_HREA_EXPERIMENT(NAME, NUM_OF_RUNS, SUITE) runs the
+%   standalone MMOEA-DC code in the same benchmark-experiment style used by
+%   HREA. Supported suites are:
+%       'CEC2020'
+%       'IDMP'
+%       'IDMP_e'
+%       'auto'    - infer the suite from NAME
+%
+%   Example:
+%       results = run_HREA_experiment('IDMPM2T4_e', 1, 'IDMP_e');
+%       results = run_HREA_experiment('CEC2020_F01', 5, 'CEC2020');
 
     if nargin < 1 || isempty(name)
         name = 'IDMPM2T4_e';
@@ -11,20 +18,21 @@ function results = run_HREA_experiment(name, num_of_runs)
     if nargin < 2 || isempty(num_of_runs)
         num_of_runs = 1;
     end
+    if nargin < 3 || isempty(suite)
+        suite = InferBenchmarkSuite(name);
+    end
+    suite = NormalizeSuiteName(suite);
 
-    AddExistingPath('MM_testfunctions');
-    AddExistingPath('IDMP_testfunctions');
-    AddExistingPath('Indicator_calculation');
-    AddExistingPath('fun_plot');
+    SetupBenchmarkPaths(suite);
 
     clc;
     close all;
 
-    problem = ResolveBenchmarkProblem(name);
-    fprintf('Running test function: %s\n', name);
+    problem = ResolveBenchmarkProblem(name, suite);
+    fprintf('Running %s test function: %s\n', suite, name);
 
     opts = BuildDefaultOptions(problem);
-    [pfture, psture] = ResolveReferenceSets(name);
+    [pfture, psture] = ResolveReferenceSets(name, suite);
 
     IGDX_all = nan(num_of_runs, 1);
     IGD_all = nan(num_of_runs, 1);
@@ -76,6 +84,9 @@ function results = run_HREA_experiment(name, num_of_runs)
     end
 
     results = struct();
+    results.suite = suite;
+    results.problem_name = name;
+    results.options = opts;
     results.IGDX_all = IGDX_all;
     results.IGD_all = IGD_all;
     results.HV_all = HV_all;
@@ -95,14 +106,14 @@ function results = run_HREA_experiment(name, num_of_runs)
     results.rPSP_mean = LocalNanMean(rPSP_all);
     results.rPSP_std = LocalNanStd(rPSP_all);
 
-    fprintf('\n==================== %d 次运行结果汇总 ====================\n', num_of_runs);
+    fprintf('\n==================== %s / %d 次运行结果汇总 ====================\n', suite, num_of_runs);
     fprintf('IGDX 平均值: %.6e (标准差: %.4e)\n', results.IGDX_mean, results.IGDX_std);
     fprintf('IGD  平均值: %.6e (标准差: %.6e)\n', results.IGD_mean, results.IGD_std);
     fprintf('HV   平均值: %.6e (标准差: %.6e)\n', results.HV_mean, results.HV_std);
     fprintf('DPSP 平均值: %.6e (标准差: %.6e)\n', results.rPSP_mean, results.rPSP_std);
 
-    algTag = 'HREA';
-    resultDir = fullfile(pwd, 'compare_results');
+    algTag = 'MMOEADC';
+    resultDir = fullfile(pwd, 'compare_results', suite);
     if ~exist(resultDir, 'dir')
         mkdir(resultDir);
     end
@@ -119,7 +130,7 @@ function results = run_HREA_experiment(name, num_of_runs)
     rPSP_std = results.rPSP_std;
 
     save(save_path, ...
-        'IGDX_all', 'IGD_all', 'HV_all', 'rPSP_all', ...
+        'suite', 'name', 'IGDX_all', 'IGD_all', 'HV_all', 'rPSP_all', ...
         'IGDX_mean', 'IGD_mean', 'HV_mean', 'rPSP_mean', ...
         'IGDX_std', 'IGD_std', 'HV_std', 'rPSP_std', ...
         'static_metric', 'IGD_hist_all', 'IGDX_hist_all', 'FE_hist_all', 'gen_hist_all');
@@ -137,19 +148,82 @@ function results = run_HREA_experiment(name, num_of_runs)
     disp('Optimization Finished.');
 end
 
+function suite = InferBenchmarkSuite(name)
+    upperName = upper(name);
+    if contains(upperName, 'CEC2020')
+        suite = 'CEC2020';
+    elseif endsWith(lower(name), '_e')
+        suite = 'IDMP_e';
+    elseif contains(upperName, 'IDMP')
+        suite = 'IDMP';
+    else
+        suite = 'auto';
+    end
+end
+
+function suite = NormalizeSuiteName(suite)
+    switch lower(strtrim(suite))
+        case 'cec2020'
+            suite = 'CEC2020';
+        case 'idmp'
+            suite = 'IDMP';
+        case {'idmp_e', 'idmpe'}
+            suite = 'IDMP_e';
+        case 'auto'
+            suite = 'auto';
+        otherwise
+            error('run_HREA_experiment:InvalidSuite', ...
+                'Unsupported suite "%s". Use CEC2020, IDMP, IDMP_e, or auto.', suite);
+    end
+end
+
+function SetupBenchmarkPaths(suite)
+    AddExistingPath('.');
+    AddExistingPath('MM_testfunctions');
+    AddExistingPath('IDMP_testfunctions');
+    AddExistingPath('Indicator_calculation');
+    AddExistingPath('fun_plot');
+
+    switch suite
+        case 'CEC2020'
+            AddExistingPath(fullfile('MM_testfunctions', 'CEC2020'));
+            AddExistingPath('CEC2020');
+            AddExistingPath('CEC2020_testfunctions');
+        case 'IDMP'
+            AddExistingPath(fullfile('IDMP_testfunctions', 'IDMP'));
+            AddExistingPath('IDMP');
+        case 'IDMP_e'
+            AddExistingPath(fullfile('IDMP_testfunctions', 'IDMP_e'));
+            AddExistingPath('IDMP_e');
+        otherwise
+            AddExistingPath(fullfile('MM_testfunctions', 'CEC2020'));
+            AddExistingPath(fullfile('IDMP_testfunctions', 'IDMP'));
+            AddExistingPath(fullfile('IDMP_testfunctions', 'IDMP_e'));
+    end
+end
+
 function AddExistingPath(folderName)
     if exist(folderName, 'dir') == 7
         addpath(genpath(folderName));
     end
 end
 
-function problem = ResolveBenchmarkProblem(name)
+function problem = ResolveBenchmarkProblem(name, suite)
     if exist('objective_description_function', 'file') == 2
-        problem = objective_description_function(name);
-    else
-        error('run_HREA_experiment:MissingDependency', ...
-            'objective_description_function.m was not found on the MATLAB path.');
+        try
+            problem = objective_description_function(name);
+            return;
+        catch ME
+            if ~strcmp(suite, 'auto')
+                rethrow(ME);
+            end
+        end
     end
+
+    error('run_HREA_experiment:MissingDependency', ...
+        ['Failed to construct benchmark problem "%s" for suite "%s". ', ...
+         'Please ensure objective_description_function.m and the corresponding test suite paths are available.'], ...
+         name, suite);
 end
 
 function opts = BuildDefaultOptions(problem)
@@ -189,12 +263,12 @@ function value = GetProblemScalar(problem, names, defaultValue)
     end
 end
 
-function [pfture, psture] = ResolveReferenceSets(name)
+function [pfture, psture] = ResolveReferenceSets(name, suite)
     pfture = [];
     psture = [];
 
     if exist('loadReferenceData', 'file') == 2
-        referenceData = loadReferenceData(name);
+        referenceData = loadReferenceData(name, suite);
     else
         referenceData = struct();
     end

@@ -1,10 +1,14 @@
-# MMOEA-DC（独立 MATLAB 版本）
+# MMOEA-DC（HREA 风格 MATLAB 版本）
 
-本仓库提供了一个**不依赖 PlatEMO** 的 MMOEA-DC（Decision-space Crowding based Multi-Objective Evolutionary Algorithm）独立 MATLAB 实现。
+本仓库提供了一个**不依赖 PlatEMO** 的 MMOEA-DC（Decision-space Crowding based Multi-Objective Evolutionary Algorithm）MATLAB 实现，并将实验入口改成了与 HREA 相同的批量测试模式，便于直接调用：
+
+- `CEC2020`
+- `IDMP`
+- `IDMP_e`
 
 ## 文件说明
 
-- `MMOEADC.m`：算法主入口。
+- `MMOEADC.m`：算法主入口，执行 MMOEA-DC 进化流程，并输出种群、前沿编号、FE 历史和代数历史。
 - `Initialization.m`：种群初始化。
 - `Variation.m`：模拟二进制交叉（SBX）与多项式变异。
 - `TournamentSelection.m`：锦标赛选择。
@@ -15,48 +19,57 @@
 - `NDSort.m`：非支配排序。
 - `Dominates.m`：Pareto 支配判定。
 - `HierarchicalClusteringWard.m`：纯 MATLAB 的 Ward 层次聚类。
-- `MMEA_BDC.m`：外部问题结构到 `MMOEADC` 的适配器。
-- `run_HREA_experiment.m`：整合实验驱动、指标统计、保存结果与绘图。
-- `loadReferenceData.m`：加载参考 PF/PS 数据。
+- `MMEA_BDC.m`：把外部 benchmark 问题结构转换为 `MMOEADC` 所需格式。
+- `run_HREA_experiment.m`：HREA 风格实验驱动入口，支持 `CEC2020`、`IDMP`、`IDMP_e`。
+- `loadReferenceData.m`：按 suite 和常见目录规则加载参考 PF/PS 数据。
 - `mergeReferenceBlocks.m`：合并参考数据块。
-- `ZDT1_Problem.m`：示例测试问题。
-- `demo_MMOEADC_ZDT1.m`：演示脚本。
+- `demo_MMOEADC_HREA_mode.m`：HREA 风格运行示例。
 
-## 基本用法
+## 推荐入口
 
-```matlab
-problem = ZDT1_Problem(30);
-options = struct('N',100,'MaxGen',200,'delta',5,'seed',1);
-result = MMOEADC(problem, options);
-scatter(result.population.objs(:,1), result.population.objs(:,2), 25, 'filled');
-```
-
-## 自定义问题接口
-
-需要构造一个 `Problem` 结构体，包含以下字段：
+### 1）直接按 HREA 风格跑实验
 
 ```matlab
-Problem.D = 30;
-Problem.M = 2;
-Problem.lower = zeros(1,30);
-Problem.upper = ones(1,30);
-Problem.evaluate = @(decs) myObjective(decs);
+results = run_HREA_experiment('IDMPM2T4_e', 1, 'IDMP_e');
+results = run_HREA_experiment('IDMPM2T4',   1, 'IDMP');
+results = run_HREA_experiment('CEC2020_F01', 1, 'CEC2020');
 ```
 
-其中 `decs` 为 `N x D` 决策变量矩阵，返回值必须是 `N x M` 的目标矩阵。
-
-
-## HREA/MMOEA-DC 实验主程序
-
-如果你的工程里已经包含 `objective_description_function.m`、指标计算函数、参考 PF/PS 数据以及绘图函数，可以直接运行：
+如果第三个参数 `suite` 不传，程序会根据名字自动推断：
 
 ```matlab
 results = run_HREA_experiment('IDMPM2T4_e', 1);
 ```
 
-新增文件说明：
+### 2）使用 demo 入口
 
-- `MMEA_BDC.m`：将外部问题结构适配到 `MMOEADC` 主程序。
-- `run_HREA_experiment.m`：整合你提供的批量实验、指标统计、保存结果、绘图调用流程。
-- `loadReferenceData.m`：按常见目录约定加载参考 PF/PS 数据。
-- `mergeReferenceBlocks.m`：合并 `PF/PS` 分块数据。
+```matlab
+demo_MMOEADC_HREA_mode('IDMP_e', 'IDMPM2T4_e', 1);
+demo_MMOEADC_HREA_mode('IDMP',   'IDMPM2T4',   1);
+demo_MMOEADC_HREA_mode('CEC2020','CEC2020_F01',1);
+```
+
+## 运行依赖
+
+为了真正运行 `CEC2020 / IDMP / IDMP_e` 测试函数，需要你的工程目录中存在以下 HREA 风格依赖：
+
+- `objective_description_function.m`
+- 对应测试函数目录，例如 `MM_testfunctions/`、`IDMP_testfunctions/`
+- 指标计算目录，例如 `Indicator_calculation/`
+- 可选绘图目录，例如 `fun_plot/`
+- 可选参考 PF / PS 数据文件
+
+## 输出结果
+
+运行 `run_HREA_experiment` 后，结果会保存到：
+
+```matlab
+compare_results/<suite>/MMOEADC_<problem_name>_metrics_all_runs.mat
+```
+
+并返回 `results` 结构体，其中包含：
+
+- `IGDX_all`, `IGD_all`, `HV_all`, `rPSP_all`
+- `IGD_hist_all`, `IGDX_hist_all`, `FE_hist_all`, `gen_hist_all`
+- `IGDX_mean/std`, `IGD_mean/std`, `HV_mean/std`, `rPSP_mean/std`
+- `suite`, `problem_name`, `options`

@@ -1,8 +1,12 @@
-function referenceData = loadReferenceData(name)
+function referenceData = loadReferenceData(name, suite)
 %LOADREFERENCEDATA Load benchmark PF/PS reference data from MAT files.
-%   REFERENCEDATA = LOADREFERENCEDATA(NAME) searches common local folders for
-%   a MAT file named after NAME and extracts standard PF/PS fields when they
-%   exist. Missing fields are returned as empty arrays.
+%   REFERENCEDATA = LOADREFERENCEDATA(NAME, SUITE) searches common local
+%   folders for a MAT file named after NAME and extracts standard PF/PS
+%   fields when they exist. Missing fields are returned as empty arrays.
+
+    if nargin < 2 || isempty(suite)
+        suite = 'auto';
+    end
 
     candidateDirs = { ...
         fullfile(pwd, 'reference_data'), ...
@@ -11,11 +15,27 @@ function referenceData = loadReferenceData(name)
         fullfile(pwd, 'MM_testfunctions'), ...
         fullfile(pwd, 'IDMP_testfunctions')};
 
+    switch lower(suite)
+        case 'cec2020'
+            candidateDirs = [candidateDirs, { ...
+                fullfile(pwd, 'MM_testfunctions', 'CEC2020'), ...
+                fullfile(pwd, 'CEC2020')}]; %#ok<AGROW>
+        case 'idmp'
+            candidateDirs = [candidateDirs, { ...
+                fullfile(pwd, 'IDMP_testfunctions', 'IDMP'), ...
+                fullfile(pwd, 'IDMP')}]; %#ok<AGROW>
+        case 'idmp_e'
+            candidateDirs = [candidateDirs, { ...
+                fullfile(pwd, 'IDMP_testfunctions', 'IDMP_e'), ...
+                fullfile(pwd, 'IDMP_e')}]; %#ok<AGROW>
+    end
+
     candidateFiles = {};
     for i = 1:numel(candidateDirs)
         candidateFiles{end + 1} = fullfile(candidateDirs{i}, [name, '.mat']); %#ok<AGROW>
         candidateFiles{end + 1} = fullfile(candidateDirs{i}, 'PF_PS', [name, '.mat']); %#ok<AGROW>
         candidateFiles{end + 1} = fullfile(candidateDirs{i}, 'truePF', [name, '.mat']); %#ok<AGROW>
+        candidateFiles{end + 1} = fullfile(candidateDirs{i}, suite, [name, '.mat']); %#ok<AGROW>
     end
 
     loaded = [];
