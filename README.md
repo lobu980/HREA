@@ -63,7 +63,7 @@ demo_MMOEADC_HREA_mode('CEC2020','CEC2020_F01',1);
 
 ## 绘图支持
 
-运行 `run_HREA_experiment` 时，若 `opts.enablePlot = true` 且基准名称被 `get_local_fun.m` 支持，则会自动调用 `PlotPopulations.m` 绘制当前种群与参考 PS / PF 的对比图。
+运行 `run_HREA_experiment` 时，若 `opts.enablePlot = true` 且基准名称被 `get_local_fun.m` 支持，则会在**迭代过程中**通过 `PlotFcn` 回调自动调用 `PlotPopulations.m`，实时绘制当前种群与参考 PS / PF 的对比图。
 
 ## 输出结果
 

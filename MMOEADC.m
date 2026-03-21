@@ -24,6 +24,8 @@ function Result = MMOEADC(Problem, Options)
 %       disM              - Polynomial mutation distribution index. Default: 20.
 %       seed              - Random seed. Default: [].
 %       saveHistory       - Whether to save population history. Default: true.
+%       PlotFcn           - Optional iteration callback: PlotFcn(state).
+%       plotInterval      - Plot/update frequency in generations. Default: 1.
 %
 %   Return fields of RESULT:
 %       population        - Final population structure with fields decs/objs.
@@ -60,6 +62,8 @@ function Result = MMOEADC(Problem, Options)
         History = {};
     end
 
+    InvokePlotFcn(Options, Population, FE_hist(1), Options.FEmax, 0);
+
     for gen = 1:Options.MaxGen
         CrowdDis  = Crowding(Population.decs);
         MatingPool = TournamentSelection(2, Options.N, -CrowdDis);
@@ -71,6 +75,10 @@ function Result = MMOEADC(Problem, Options)
         FE_hist(gen + 1) = FE_hist(gen) + size(Offspring.decs, 1);
         if Options.saveHistory
             History{gen + 1} = Population;
+        end
+
+        if mod(gen, Options.plotInterval) == 0 || gen == Options.MaxGen
+            InvokePlotFcn(Options, Population, FE_hist(gen + 1), Options.FEmax, gen);
         end
     end
 
@@ -115,7 +123,9 @@ function Options = FillDefaultOptions(Options)
         'proM', 1, ...
         'disM', 20, ...
         'seed', [], ...
-        'saveHistory', true);
+        'saveHistory', true, ...
+        'PlotFcn', [], ...
+        'plotInterval', 1);
 
     fields = fieldnames(defaults);
     for i = 1:numel(fields)
@@ -130,4 +140,24 @@ function Options = FillDefaultOptions(Options)
         end
         Options.MaxGen = max(1, ceil((Options.FEmax - Options.N) / Options.N));
     end
+end
+
+function InvokePlotFcn(Options, Population, currentFE, maxFE, generation)
+    if isempty(Options.PlotFcn)
+        return;
+    end
+
+    if isempty(maxFE)
+        maxFE = currentFE;
+    end
+
+    state = struct();
+    state.population = Population;
+    state.currentFE = currentFE;
+    state.maxFE = maxFE;
+    state.generation = generation;
+    state.frontNo = NDSort(Population.objs, size(Population.objs, 1));
+    state.archive.decs = Population.decs(state.frontNo == 1, :);
+    state.archive.objs = Population.objs(state.frontNo == 1, :);
+    Options.PlotFcn(state);
 end

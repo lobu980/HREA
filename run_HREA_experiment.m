@@ -32,6 +32,10 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
     fprintf('Running %s test function: %s\n', suite, name);
 
     opts = BuildDefaultOptions(problem);
+    if opts.enablePlot && exist('PlotPopulations', 'file') == 2
+        opts.plotFcn = @(state) IterationPlotCallback(state, name);
+        opts.plotInterval = 1;
+    end
     [pfture, psture] = ResolveReferenceSets(name, suite);
 
     IGDX_all = nan(num_of_runs, 1);
@@ -75,19 +79,6 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
         end
 
         metric = ComputeMetrics(TraPop, pfture, psture);
-
-        if isfield(opts, 'enablePlot') && opts.enablePlot && exist('PlotPopulations', 'file') == 2
-            try
-                currentFE = opts.FEmax;
-                if ~isempty(FE_hist_all{runs})
-                    currentFE = FE_hist_all{runs}(end);
-                end
-                PlotPopulations(TraPop, DifPop, currentFE, opts.FEmax, name, size(TraPop.X, 2));
-                drawnow;
-            catch ME
-                warning('run_HREA_experiment:PlotFailed', 'PlotPopulations failed for %s: %s', name, ME.message);
-            end
-        end
 
         IGDX_all(runs) = metric.IGDx;
         IGD_all(runs) = metric.IGD;
@@ -354,4 +345,15 @@ function value = LocalNanStd(x)
     else
         value = std(x);
     end
+end
+
+function IterationPlotCallback(state, name)
+    if exist('PlotPopulations', 'file') ~= 2
+        return;
+    end
+
+    pop = struct('X', state.population.decs, 'F', state.population.objs);
+    archive = struct('X', state.archive.decs, 'F', state.archive.objs);
+    PlotPopulations(pop, archive, state.currentFE, state.maxFE, name, size(pop.X, 2));
+    drawnow limitrate;
 end

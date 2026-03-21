@@ -47,6 +47,8 @@ function internalOptions = ConvertOptions(opts)
     internalOptions.disM = GetOption(opts, {'disM', 'etaM_local'}, 20);
     internalOptions.seed = GetOption(opts, {'seed'}, []);
     internalOptions.saveHistory = true;
+    internalOptions.PlotFcn = GetOption(opts, {'plotFcn', 'PlotFcn'}, []);
+    internalOptions.plotInterval = GetOption(opts, {'plotInterval'}, 1);
 end
 
 function value = GetOption(opts, names, defaultValue)
