@@ -60,6 +60,7 @@ demo_MMOEADC_HREA_mode('CEC2020','CEC2020_F01',1);
 - 指标计算目录，例如 `Indicator_calculation/`
 - 可选绘图目录，例如 `fun_plot/`
 - 可选参考 PF / PS 数据文件
+- 即使缺少外部 `Indicator_calculation/` 指标函数或 `.mat` 参考数据，程序也会优先尝试使用 `get_local_fun.m` 生成参考集，并用内置 MATLAB 版本的 IGD / IGDX / HV / CR 计算逻辑回退计算指标。
 
 ## 绘图支持
 

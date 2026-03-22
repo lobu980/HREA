@@ -36,7 +36,7 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
         opts.plotFcn = @(state) IterationPlotCallback(state, name);
         opts.plotInterval = 1;
     end
-    [pfture, psture] = ResolveReferenceSets(name, suite);
+    [pfture, psture] = ResolveReferenceSets(name, suite, problem);
 
     IGDX_all = nan(num_of_runs, 1);
     IGD_all = nan(num_of_runs, 1);
@@ -268,9 +268,11 @@ function value = GetProblemScalar(problem, names, defaultValue)
     end
 end
 
-function [pfture, psture] = ResolveReferenceSets(name, suite)
+function [pfture, psture] = ResolveReferenceSets(name, suite, problem)
     pfture = [];
     psture = [];
+    decisionDim = GetProblemScalar(problem, {'D', 'dim', 'dims', 'n_var', 'nvars', 'nx', 'numVar', 'num_var'}, []);
+    objectiveDim = GetProblemScalar(problem, {'M', 'n_obj', 'nobjs', 'numObj', 'num_obj', 'nf'}, []);
 
     if exist('loadReferenceData', 'file') == 2
         referenceData = loadReferenceData(name, suite);
@@ -280,41 +282,77 @@ function [pfture, psture] = ResolveReferenceSets(name, suite)
 
     if ~isempty(referenceData)
         psture = mergeReferenceBlocks(...
-            GetStructField(referenceData, 'PS_global1', []), ...
-            GetStructField(referenceData, 'PS_global2', []), ...
-            GetStructField(referenceData, 'PS_local', []));
+            NormalizeReferenceBlock(GetStructField(referenceData, 'PS_global1', []), decisionDim), ...
+            NormalizeReferenceBlock(GetStructField(referenceData, 'PS_global2', []), decisionDim), ...
+            NormalizeReferenceBlock(GetStructField(referenceData, 'PS_local', []), decisionDim));
         pfture = mergeReferenceBlocks(...
-            GetStructField(referenceData, 'PF_global', []), ...
-            GetStructField(referenceData, 'PF_local', []));
+            NormalizeReferenceBlock(GetStructField(referenceData, 'PF_global', []), objectiveDim), ...
+            NormalizeReferenceBlock(GetStructField(referenceData, 'PF_local', []), objectiveDim));
+    end
+
+    if (isempty(pfture) || isempty(psture)) && exist('get_local_fun', 'file') == 2
+        try
+            [PS_global1, PS_global2, PS_local, PF_global, PF_local] = get_local_fun(name);
+            if isempty(psture)
+                psture = mergeReferenceBlocks(...
+                    NormalizeReferenceBlock(PS_global1, decisionDim), ...
+                    NormalizeReferenceBlock(PS_global2, decisionDim), ...
+                    NormalizeReferenceBlock(PS_local, decisionDim));
+            end
+            if isempty(pfture)
+                pfture = mergeReferenceBlocks(...
+                    NormalizeReferenceBlock(PF_global, objectiveDim), ...
+                    NormalizeReferenceBlock(PF_local, objectiveDim));
+            end
+        catch
+        end
     end
 end
 
 function metric = ComputeMetrics(TraPop, pfture, psture)
     metric = struct('IGD', nan, 'HV', nan, 'IGDx', nan, 'rPSP', nan);
 
-    if ~isempty(pfture) && exist('IGD_calculation', 'file') == 2
-        metric.IGD = IGD_calculation(TraPop.F, pfture);
-    end
-    if ~isempty(pfture) && exist('HV_calculation', 'file') == 2
-        try
-            [metric.HV, ~] = HV_calculation(TraPop.F, pfture);
-        catch
-            hvResult = HV_calculation(TraPop.F, pfture);
-            if iscell(hvResult)
-                metric.HV = hvResult{1};
-            else
-                metric.HV = hvResult(1);
+    if ~isempty(pfture)
+        if exist('IGD_calculation', 'file') == 2
+            metric.IGD = IGD_calculation(TraPop.F, pfture);
+        else
+            metric.IGD = LocalIGD(TraPop.F, pfture);
+        end
+
+        if exist('HV_calculation', 'file') == 2
+            try
+                [metric.HV, ~] = HV_calculation(TraPop.F, pfture);
+            catch
+                hvResult = HV_calculation(TraPop.F, pfture);
+                if iscell(hvResult)
+                    metric.HV = hvResult{1};
+                else
+                    metric.HV = hvResult(1);
+                end
             end
+        else
+            metric.HV = LocalHV(TraPop.F, pfture);
         end
     end
-    if ~isempty(psture) && exist('IGDX_calculation', 'file') == 2
-        metric.IGDx = IGDX_calculation(TraPop.X, psture);
-    end
-    if ~isempty(psture) && exist('CR_calculation', 'file') == 2 && ~isnan(metric.IGDx) && metric.IGDx ~= 0
-        CR = CR_calculation(TraPop.X, psture);
-        PSP = CR / metric.IGDx;
-        if PSP ~= 0
-            metric.rPSP = 1 / PSP;
+
+    if ~isempty(psture)
+        if exist('IGDX_calculation', 'file') == 2
+            metric.IGDx = IGDX_calculation(TraPop.X, psture);
+        else
+            metric.IGDx = LocalIGD(TraPop.X, psture);
+        end
+
+        if exist('CR_calculation', 'file') == 2
+            CR = CR_calculation(TraPop.X, psture);
+        else
+            CR = LocalCR(TraPop.X, psture);
+        end
+
+        if ~isnan(metric.IGDx) && metric.IGDx ~= 0 && ~isnan(CR)
+            PSP = CR / metric.IGDx;
+            if PSP ~= 0
+                metric.rPSP = 1 / PSP;
+            end
         end
     end
 end
@@ -356,4 +394,103 @@ function IterationPlotCallback(state, name)
     archive = struct('X', state.archive.decs, 'F', state.archive.objs);
     PlotPopulations(pop, archive, state.currentFE, state.maxFE, name, size(pop.X, 2));
     drawnow limitrate;
+end
+
+function block = NormalizeReferenceBlock(block, dimension)
+    if isempty(block) || ~isnumeric(block)
+        block = [];
+        return;
+    end
+
+    if isempty(dimension)
+        dimension = size(block, 2);
+    end
+
+    if size(block, 2) == dimension
+        normalized = block;
+    elseif mod(size(block, 2), dimension) == 0
+        normalized = [];
+        nGroups = size(block, 2) / dimension;
+        for i = 1:nGroups
+            cols = (i - 1) * dimension + (1:dimension);
+            normalized = [normalized; block(:, cols)]; %#ok<AGROW>
+        end
+    else
+        normalized = block;
+    end
+
+    mask = all(isfinite(normalized), 2);
+    block = normalized(mask, :);
+end
+
+function value = LocalIGD(population, reference)
+    if isempty(population) || isempty(reference)
+        value = nan;
+        return;
+    end
+    distances = PairwiseDistances(reference, population);
+    value = mean(min(distances, [], 2));
+end
+
+function value = LocalCR(population, reference)
+    if isempty(population) || isempty(reference)
+        value = nan;
+        return;
+    end
+    refRange = max(reference, [], 1) - min(reference, [], 1);
+    tol = 0.01 * norm(refRange(refRange > 0));
+    if isempty(tol) || tol == 0
+        tol = 1e-3;
+    end
+    distances = PairwiseDistances(reference, population);
+    value = sum(min(distances, [], 2) <= tol) / size(reference, 1);
+end
+
+function value = LocalHV(population, reference)
+    if isempty(population)
+        value = nan;
+        return;
+    end
+
+    frontNo = NDSort(population, size(population, 1));
+    population = population(frontNo == 1, :);
+    M = size(population, 2);
+    refPoint = max([population; reference], [], 1);
+    lowPoint = min([population; reference], [], 1);
+    span = refPoint - lowPoint;
+    span(span == 0) = 1;
+    refPoint = refPoint + 0.1 * span;
+
+    if M == 2
+        population = sortrows(population, 1);
+        bestY = refPoint(2);
+        value = 0;
+        for i = 1:size(population, 1)
+            if population(i, 2) < bestY
+                value = value + (refPoint(1) - population(i, 1)) * (bestY - population(i, 2));
+                bestY = population(i, 2);
+            end
+        end
+    else
+        value = MonteCarloHV(population, refPoint, lowPoint);
+    end
+end
+
+function value = MonteCarloHV(population, refPoint, lowPoint)
+    sampleCount = 20000;
+    s = rng;
+    rng(1, 'twister');
+    samples = rand(sampleCount, numel(refPoint)) .* repmat(refPoint - lowPoint, sampleCount, 1) + repmat(lowPoint, sampleCount, 1);
+    rng(s);
+    dominated = false(sampleCount, 1);
+    for i = 1:size(population, 1)
+        dominated = dominated | all(samples >= population(i, :), 2);
+    end
+    value = prod(refPoint - lowPoint) * mean(dominated);
+end
+
+function distances = PairwiseDistances(A, B)
+    AA = sum(A .^ 2, 2);
+    BB = sum(B .^ 2, 2).';
+    distances = sqrt(max(AA + BB - 2 * (A * B.'), 0));
 end
