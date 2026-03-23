@@ -80,4 +80,7 @@ compare_results/<suite>/MMOEADC_<problem_name>_metrics_all_runs.mat
 - `IGDX_all`, `IGD_all`, `HV_all`, `rPSP_all`
 - `IGD_hist_all`, `IGDX_hist_all`, `FE_hist_all`, `gen_hist_all`
 - `IGDX_mean/std`, `IGD_mean/std`, `HV_mean/std`, `rPSP_mean/std`
-- `suite`, `problem_name`, `options`
+- `IGDX_valid_runs`, `IGD_valid_runs`, `HV_valid_runs`, `rPSP_valid_runs`
+- `run_seeds`, `suite`, `problem_name`, `options`
+
+说明：每次重复运行都会自动分配不同随机种子；当某个指标少于 2 次有效运行时，标准差会显示为 `N/A` 并保存为 `NaN`，不再把单次实验误显示为 `0`。

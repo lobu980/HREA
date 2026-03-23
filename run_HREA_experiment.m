@@ -48,11 +48,16 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
     IGDX_hist_all = cell(num_of_runs, 1);
     FE_hist_all = cell(num_of_runs, 1);
     gen_hist_all = cell(num_of_runs, 1);
+    run_seeds = nan(num_of_runs, 1);
+    baseSeed = CreateBaseSeed(opts.seed);
 
     for runs = 1:num_of_runs
-        fprintf('总循环次数: %d / %d\n', runs, num_of_runs);
+        runOpts = opts;
+        runOpts.seed = ResolveRunSeed(opts.seed, baseSeed, runs);
+        run_seeds(runs) = runOpts.seed;
+        fprintf('总循环次数: %d / %d (随机种子: %d)\n', runs, num_of_runs, runOpts.seed);
 
-        [DifPop, TraPop, out] = MMEA_BDC(problem, opts, name); %#ok<ASGLU>
+        [DifPop, TraPop, out] = MMEA_BDC(problem, runOpts, name); %#ok<ASGLU>
 
         if isfield(out, 'IGD_hist')
             IGD_hist_all{runs} = out.IGD_hist(:);
@@ -101,6 +106,7 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
     results.FE_hist_all = FE_hist_all;
     results.gen_hist_all = gen_hist_all;
 
+    results.run_seeds = run_seeds;
     results.IGDX_mean = LocalNanMean(IGDX_all);
     results.IGDX_std = LocalNanStd(IGDX_all);
     results.IGD_mean = LocalNanMean(IGD_all);
@@ -109,12 +115,16 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
     results.HV_std = LocalNanStd(HV_all);
     results.rPSP_mean = LocalNanMean(rPSP_all);
     results.rPSP_std = LocalNanStd(rPSP_all);
+    results.IGDX_valid_runs = CountValidSamples(IGDX_all);
+    results.IGD_valid_runs = CountValidSamples(IGD_all);
+    results.HV_valid_runs = CountValidSamples(HV_all);
+    results.rPSP_valid_runs = CountValidSamples(rPSP_all);
 
     fprintf('\n==================== %s / %d 次运行结果汇总 ====================\n', suite, num_of_runs);
-    fprintf('IGDX 平均值: %.6e (标准差: %.4e)\n', results.IGDX_mean, results.IGDX_std);
-    fprintf('IGD  平均值: %.6e (标准差: %.6e)\n', results.IGD_mean, results.IGD_std);
-    fprintf('HV   平均值: %.6e (标准差: %.6e)\n', results.HV_mean, results.HV_std);
-    fprintf('DPSP 平均值: %.6e (标准差: %.6e)\n', results.rPSP_mean, results.rPSP_std);
+    PrintMetricSummary('IGDX', results.IGDX_mean, results.IGDX_std, results.IGDX_valid_runs);
+    PrintMetricSummary('IGD ', results.IGD_mean, results.IGD_std, results.IGD_valid_runs);
+    PrintMetricSummary('HV  ', results.HV_mean, results.HV_std, results.HV_valid_runs);
+    PrintMetricSummary('DPSP', results.rPSP_mean, results.rPSP_std, results.rPSP_valid_runs);
 
     algTag = 'MMOEADC';
     resultDir = fullfile(pwd, 'compare_results', suite);
@@ -132,11 +142,16 @@ function results = run_HREA_experiment(name, num_of_runs, suite)
     HV_std = results.HV_std;
     rPSP_mean = results.rPSP_mean;
     rPSP_std = results.rPSP_std;
+    IGDX_valid_runs = results.IGDX_valid_runs;
+    IGD_valid_runs = results.IGD_valid_runs;
+    HV_valid_runs = results.HV_valid_runs;
+    rPSP_valid_runs = results.rPSP_valid_runs;
 
     save(save_path, ...
-        'suite', 'name', 'IGDX_all', 'IGD_all', 'HV_all', 'rPSP_all', ...
+        'suite', 'name', 'run_seeds', 'IGDX_all', 'IGD_all', 'HV_all', 'rPSP_all', ...
         'IGDX_mean', 'IGD_mean', 'HV_mean', 'rPSP_mean', ...
         'IGDX_std', 'IGD_std', 'HV_std', 'rPSP_std', ...
+        'IGDX_valid_runs', 'IGD_valid_runs', 'HV_valid_runs', 'rPSP_valid_runs', ...
         'static_metric', 'IGD_hist_all', 'IGDX_hist_all', 'FE_hist_all', 'gen_hist_all');
 
     fprintf('\n所有结果已保存至: %s\n', save_path);
@@ -254,6 +269,7 @@ function opts = BuildDefaultOptions(problem)
     opts.fdknObjW = 0.4;
     opts.fdknDecW = 0.6;
     opts.enablePlot = true;
+    opts.seed = [];
 end
 
 function value = GetProblemScalar(problem, names, defaultValue)
@@ -443,13 +459,48 @@ end
 
 function value = LocalNanStd(x)
     x = x(~isnan(x));
-    if isempty(x)
+    if numel(x) < 2
         value = nan;
-    elseif numel(x) == 1
-        value = 0;
     else
-        value = std(x);
+        value = std(x, 0);
     end
+end
+
+function count = CountValidSamples(x)
+    count = nnz(~isnan(x));
+end
+
+function PrintMetricSummary(label, meanValue, stdValue, validRuns)
+    if isnan(meanValue)
+        fprintf('%s 平均值: NaN (标准差: NaN, 有效运行次数: %d)\n', label, validRuns);
+        return;
+    end
+
+    if validRuns < 2 || isnan(stdValue)
+        fprintf('%s 平均值: %.6e (标准差: N/A, 有效运行次数: %d；至少需要 2 次有效运行)\n', ...
+            label, meanValue, validRuns);
+    else
+        fprintf('%s 平均值: %.6e (标准差: %.6e, 有效运行次数: %d)\n', ...
+            label, meanValue, stdValue, validRuns);
+    end
+end
+
+function baseSeed = CreateBaseSeed(seedOption)
+    if isnumeric(seedOption) && ~isempty(seedOption)
+        baseSeed = double(seedOption(1));
+    else
+        timeVector = clock;
+        baseSeed = floor(mod(sum(timeVector .* [1, 10, 100, 1000, 10000, 100000]), 2147483646)) + 1;
+    end
+end
+
+function runSeed = ResolveRunSeed(seedOption, baseSeed, runIndex)
+    if isnumeric(seedOption) && numel(seedOption) >= runIndex
+        runSeed = double(seedOption(runIndex));
+    else
+        runSeed = double(baseSeed + runIndex - 1);
+    end
+    runSeed = floor(mod(runSeed - 1, 2147483646)) + 1;
 end
 
 function IterationPlotCallback(state, name)
