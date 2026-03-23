@@ -22,6 +22,7 @@
 - `MMEA_BDC.m`：把外部 benchmark 问题结构转换为 `MMOEADC` 所需格式。
 - `run_HREA_experiment.m`：HREA 风格实验驱动入口，支持 `CEC2020`、`IDMP`、`IDMP_e`。
 - `loadReferenceData.m`：按 suite 和常见目录规则加载参考 PF/PS 数据。
+  - `run_HREA_experiment.m` 现在优先使用内部参考数据加载逻辑，避免 MATLAB 路径上同名函数的参数签名冲突导致“输入参数太多”。
 - `mergeReferenceBlocks.m`：合并参考数据块。
 - `demo_MMOEADC_HREA_mode.m`：HREA 风格运行示例。
 - `get_local_fun.m`：生成 PS / PF 参考曲线或曲面。

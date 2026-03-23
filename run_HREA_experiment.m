@@ -274,11 +274,7 @@ function [pfture, psture] = ResolveReferenceSets(name, suite, problem)
     decisionDim = GetProblemScalar(problem, {'D', 'dim', 'dims', 'n_var', 'nvars', 'nx', 'numVar', 'num_var'}, []);
     objectiveDim = GetProblemScalar(problem, {'M', 'n_obj', 'nobjs', 'numObj', 'num_obj', 'nf'}, []);
 
-    if exist('loadReferenceData', 'file') == 2
-        referenceData = loadReferenceData(name, suite);
-    else
-        referenceData = struct();
-    end
+    referenceData = LocalLoadReferenceData(name, suite);
 
     if ~isempty(referenceData)
         psture = mergeReferenceBlocks(...
@@ -305,6 +301,77 @@ function [pfture, psture] = ResolveReferenceSets(name, suite, problem)
                     NormalizeReferenceBlock(PF_local, objectiveDim));
             end
         catch
+        end
+    end
+end
+
+function referenceData = LocalLoadReferenceData(name, suite)
+    if nargin < 2 || isempty(suite)
+        suite = 'auto';
+    end
+
+    candidateDirs = { ...
+        fullfile(pwd, 'reference_data'), ...
+        fullfile(pwd, 'ReferenceData'), ...
+        fullfile(pwd, 'compare_results'), ...
+        fullfile(pwd, 'MM_testfunctions'), ...
+        fullfile(pwd, 'IDMP_testfunctions')};
+
+    switch lower(suite)
+        case 'cec2020'
+            candidateDirs = [candidateDirs, { ...
+                fullfile(pwd, 'MM_testfunctions', 'CEC2020'), ...
+                fullfile(pwd, 'CEC2020')}]; %#ok<AGROW>
+        case 'idmp'
+            candidateDirs = [candidateDirs, { ...
+                fullfile(pwd, 'IDMP_testfunctions', 'IDMP'), ...
+                fullfile(pwd, 'IDMP')}]; %#ok<AGROW>
+        case 'idmp_e'
+            candidateDirs = [candidateDirs, { ...
+                fullfile(pwd, 'IDMP_testfunctions', 'IDMP_e'), ...
+                fullfile(pwd, 'IDMP_e')}]; %#ok<AGROW>
+    end
+
+    candidateFiles = {};
+    for i = 1:numel(candidateDirs)
+        candidateFiles{end + 1} = fullfile(candidateDirs{i}, [name, '.mat']); %#ok<AGROW>
+        candidateFiles{end + 1} = fullfile(candidateDirs{i}, 'PF_PS', [name, '.mat']); %#ok<AGROW>
+        candidateFiles{end + 1} = fullfile(candidateDirs{i}, 'truePF', [name, '.mat']); %#ok<AGROW>
+        candidateFiles{end + 1} = fullfile(candidateDirs{i}, suite, [name, '.mat']); %#ok<AGROW>
+    end
+
+    loaded = [];
+    for i = 1:numel(candidateFiles)
+        if exist(candidateFiles{i}, 'file') == 2
+            loaded = load(candidateFiles{i});
+            break;
+        end
+    end
+
+    referenceData = struct( ...
+        'PF_global', [], ...
+        'PF_local', [], ...
+        'PS_global1', [], ...
+        'PS_global2', [], ...
+        'PS_local', []);
+
+    if isempty(loaded)
+        return;
+    end
+
+    standardFields = fieldnames(referenceData);
+    for i = 1:numel(standardFields)
+        if isfield(loaded, standardFields{i})
+            referenceData.(standardFields{i}) = loaded.(standardFields{i});
+        end
+    end
+
+    if isfield(loaded, 'referenceData') && isstruct(loaded.referenceData)
+        nestedFields = fieldnames(referenceData);
+        for i = 1:numel(nestedFields)
+            if isfield(loaded.referenceData, nestedFields{i})
+                referenceData.(nestedFields{i}) = loaded.referenceData.(nestedFields{i});
+            end
         end
     end
 end
